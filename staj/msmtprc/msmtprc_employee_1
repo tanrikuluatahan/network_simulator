@@ -1,0 +1,10 @@
+defaults
+auth           off
+tls            off
+logfile        /root/.msmtp.log
+
+account        default
+host           mail
+port           25
+from           employee_1@localdomain.test
+domain         localdomain.test

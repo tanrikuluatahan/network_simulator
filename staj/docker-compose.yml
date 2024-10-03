@@ -1,0 +1,203 @@
+networks:
+  dmz_1:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 192.168.100.0/24
+  dmz_2:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 192.168.101.0/24
+  dmz_3:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 192.168.102.0/24
+  internal_network:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 192.168.192.0/20
+  logging:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 192.168.3.0/24
+  monitoring:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 192.168.4.0/24
+services:
+  client_machine1:
+    command: tail -f /dev/null
+    container_name: client_machine1
+    image: alpine:3.14
+    networks:
+    - dmz_1
+  client_machine2:
+    command: tail -f /dev/null
+    container_name: client_machine2
+    image: alpine:3.14
+    networks:
+    - dmz_2
+  client_machine3:
+    command: tail -f /dev/null
+    container_name: client_machine3
+    image: alpine:3.14
+    networks:
+    - dmz_3
+  db_server:
+    container_name: db_server
+    environment:
+      MYSQL_DATABASE: corporate_db
+      MYSQL_ROOT_PASSWORD: rootpassword
+    image: mysql:5.7
+    networks:
+    - internal_network
+  elasticsearch:
+    container_name: elasticsearch
+    environment: !!set
+      ES_JAVA_OPTS=-Xms1g -Xmx1g: null
+      discovery.type=single-node: null
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.2
+    networks:
+    - logging
+    ports:
+    - 9200:9200
+  employee_1:
+    command: sh -c "apk update && apk add --no-cache mailx msmtp && rm /usr/sbin/sendmail
+      && ln -s /usr/bin/msmtp /usr/sbin/sendmail && tail -f /dev/null"
+    container_name: employee_1
+    image: alpine:3.14
+    networks:
+    - internal_network
+    volumes:
+    - ./msmtprc/msmtprc_employee_1:/root/.msmtprc
+  employee_2:
+    command: sh -c "apk update && apk add --no-cache mailx msmtp && rm /usr/sbin/sendmail
+      && ln -s /usr/bin/msmtp /usr/sbin/sendmail && tail -f /dev/null"
+    container_name: employee_2
+    image: alpine:3.14
+    networks:
+    - internal_network
+    volumes:
+    - ./msmtprc/msmtprc_employee_2:/root/.msmtprc
+  employee_3:
+    command: sh -c "apk update && apk add --no-cache mailx msmtp && rm /usr/sbin/sendmail
+      && ln -s /usr/bin/msmtp /usr/sbin/sendmail && tail -f /dev/null"
+    container_name: employee_3
+    image: alpine:3.14
+    networks:
+    - internal_network
+    volumes:
+    - ./msmtprc/msmtprc_employee_3:/root/.msmtprc
+  ftp_server:
+    container_name: ftp_server
+    environment:
+      FTP_PASS: password
+      FTP_USER: employee
+      PASV_ADDRESS: 127.0.0.1
+      PASV_MAX_PORT: '21010'
+      PASV_MIN_PORT: '21000'
+    image: fauria/vsftpd
+    networks:
+    - internal_network
+    ports:
+    - '21:21'
+    - 21000-21010:21000-21010
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:8.1.2
+    networks:
+    - monitoring
+    ports:
+    - 3000:3000
+  kibana:
+    container_name: kibana
+    image: docker.elastic.co/kibana/kibana:7.10.2
+    networks:
+    - logging
+    ports:
+    - 5601:5601
+  load_balancer:
+    container_name: load_balancer
+    depends_on:
+    - web1
+    - web2
+    - web3
+    image: nginx:1.21.3
+    networks:
+    - dmz_1
+    ports:
+    - 80:80
+    volumes:
+    - ./nginx.conf:/etc/nginx/nginx.conf
+  logstash:
+    container_name: logstash
+    image: docker.elastic.co/logstash/logstash:7.10.2
+    networks:
+    - logging
+    ports:
+    - 5044:5044
+    volumes:
+    - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    - /var/log/mail.log:/var/log/mail.log
+  mail_server:
+    container_name: mail_server
+    domainname: localdomain.test
+    environment:
+      ENABLE_CLAMAV: '0'
+      ENABLE_SPAMASSASSIN: '0'
+      PERMIT_DOCKER: network
+      SSL_TYPE: ''
+    hostname: mail
+    image: mailserver/docker-mailserver:latest
+    networks:
+    - internal_network
+    ports:
+    - '25:25'
+    volumes:
+    - ./docker-data/dms/mail-data/:/var/mail/
+    - ./docker-data/dms/mail-state/:/var/mail-state/
+    - ./docker-data/dms/mail-logs/:/var/log/mail/
+    - ./docker-data/dms/config/:/tmp/docker-mailserver/
+    - /etc/localtime:/etc/localtime:ro
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.29.1
+    networks:
+    - monitoring
+    ports:
+    - 9090:9090
+    volumes:
+    - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  squid_proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.squid
+    container_name: squid_proxy
+    networks:
+    - dmz_1
+    - dmz_2
+    - dmz_3
+    - internal_network
+    ports:
+    - 3128:3128
+  web1:
+    container_name: web1
+    image: nginx:1.21.3
+    networks:
+    - dmz_1
+  web2:
+    container_name: web2
+    image: nginx:1.21.3
+    networks:
+    - dmz_2
+  web3:
+    container_name: web3
+    image: nginx:1.21.3
+    networks:
+    - dmz_3
+version: '3.8'

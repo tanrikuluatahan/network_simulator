@@ -1,0 +1,14 @@
+# Use a lightweight base image
+FROM debian:buster
+
+# Install Exim4 and any required packages (including curl)
+RUN apt-get update && apt-get install -y exim4 exim4-daemon-light curl
+
+# Set environment variables
+ENV MAILNAME=localhost
+
+# Copy the Exim configuration
+COPY ./exim4.conf.local /etc/exim4/update-exim4.conf.conf
+
+# Start the Exim4 service without modifying config files
+CMD ["service", "exim4", "start"]
